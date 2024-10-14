@@ -15,7 +15,7 @@ db = None
 def initialize_firebase():
     global firebase_app, db
     if not firebase_app:
-        cred_path = Path("C:/Users/jdrestrepo/OneDrive - Compañía de Distribución y Transporte S.A.S BIC/Desktop/chatbot/ecommerce-uswearfirebase-firebase-adminsdk-w08hg-4a71bef11c.json")
+        cred_path = Path("C:/Users/jdrestrepo/Downloads/ecommerce-uswearfirebase-firebase-adminsdk-w08hg-311f8dac54.json")
         cred = credentials.Certificate(cred_path)
         firebase_app = firebase_admin.initialize_app(cred)
         db = firestore.client()
@@ -39,4 +39,5 @@ def GetData(request):
         recommendedProducts = get_recommendations(dfProducts, category=category, num_recommendations=6)
         return Response(recommendedProducts.to_dict('records'), status=status.HTTP_200_OK)
     else:
-        return Response({"Error": "No se ha podido consultar información"}, status=status.HTTP_400_BAD_REQUEST)
+        unique_categories = dfProducts['category'].str.lower().unique().tolist()
+        return Response(unique_categories, status=status.HTTP_200_OK)

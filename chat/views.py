@@ -22,6 +22,7 @@ from sklearn.svm import SVC
 from .models import UserChat 
 from rest_framework.views import APIView
 from asgiref.sync import sync_to_async
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
 # Configuración del logger
 logging.basicConfig(level=logging.INFO)
@@ -66,6 +67,17 @@ stop_words = set(stopwords.words('spanish'))
 #         defaults={'chat_id': chat_id}
 #     )
 
+def callProducts():
+    # Obtiene los productos de la base de datos
+    url = f'http://localhost:8000/firebase/getdata/'
+    response = requests.get(url)
+    
+    if response.status_code == 200:
+        return response.json()
+    else:
+        logging.error(f"Error: {response.status_code}")
+        return None
+
 def CallGetData(category):
     logging.info(f"category en callgetdata: {category}")
     url = f'http://localhost:8000/firebase/getdata/?category={category}'
@@ -84,12 +96,12 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await context.bot.send_message(chat_id=user_id, text=user_responses[user_id])
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    productos = ['pantalones', 'camisas', 'camisetas', 'zapatos', 'vestidos', 'chaquetas', 'otros']
+    productos = callProducts()
+    logging.info(f"categorias traidas: {productos}")
+    
     user_id = update.effective_chat.id
     user_input = update.message.text
     logging.info(f"Mensaje recibido de {user_id}: {user_input}")
-
-    # storeChatId(update.message.from_user.id, user_id)
 
     if user_input == '/start':
         await start(update, context)
@@ -97,31 +109,32 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         prediccion = model.predict([user_input])
         intencion = prediccion[0]
         logging.info(f"intencion desde handle_message: {intencion}")
+        
         if intencion == 'saludos':
             user_responses[user_id] = 'Por favor, escribe que te gustaría buscar.'
             await context.bot.send_message(chat_id=user_id, text=user_responses[user_id])
         elif intencion in productos:
             recommendedProducts = CallGetData(intencion)
-            # mensaje = f"Claro, te recomiendo 5 productos que te van a gustar: {recommendedProducts}."
-            # logging.info(f"se recomendó: {recommendedProducts}")
-            # user_responses[user_id] = mensaje
-            # await context.bot.send_message(chat_id=user_id, text=mensaje)
-            primeravez = True
+            
             for product in recommendedProducts:
-                if  primeravez:
-                    mensaje = f"Claro, te recomiendo 5 productos que te van a gustar"
-                    user_responses[user_id] = mensaje
-                    await context.bot.send_message(chat_id=user_id, text=mensaje)
-                    primeravez = False
-                else:
-                    mensaje = f"Te recomiendo: {product['productName']}\n{product['image']}"
-                    logging.info(f"se recomendó: {mensaje}")
-                    user_responses[user_id] = mensaje
-                    await context.bot.send_message(chat_id=user_id, text=mensaje)
+                # Crear el botón
+                keyboard = [
+                    [InlineKeyboardButton("Ver producto", url=f"https://tnm8rkjk-4200.use2.devtunnels.ms/product/{product['id']}")]
+                ]
+                reply_markup = InlineKeyboardMarkup(keyboard)
+
+                # Enviar la imagen con el nombre del producto y el botón
+                await context.bot.send_photo(
+                    chat_id=user_id,
+                    photo=product['image'],  # URL de la imagen
+                    caption=f"<b>{product['productName']}</b>",  # Nombre en negrita
+                    parse_mode='HTML',
+                    reply_markup=reply_markup  # Agregar el botón
+                )
         else:
             mensaje = "Lo siento, ese producto no está disponible"
             user_responses[user_id] = mensaje
-            await context.bot.send_message(chat_id=user_id, text=mensaje)         
+            await context.bot.send_message(chat_id=user_id, text=user_responses[user_id])
 
 def run_bot():
     global application
