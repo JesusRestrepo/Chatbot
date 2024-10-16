@@ -9,6 +9,7 @@ def get_recommendations(df, category=None, valor=None, num_recommendations=10):
     print(valor)
     df['price'] = df['price'].str.replace('.', '', regex=False).astype(float) 
     filtered_df = df[df['category'].str.contains(category, case=False) & (df['price'] == float(valor))]
+    print(filtered_df)
     if filtered_df.empty:
         return []
   else:

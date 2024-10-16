@@ -29,8 +29,6 @@ from sklearn.metrics import mean_squared_error
 # Configuración del logger
 logging.basicConfig(level=logging.INFO)
 
-# Datos para el entrenamiento
-# Leer datos del archivo JSON
 with open('data.json', 'r', encoding='utf-8') as f:
     data = json.load(f)
 
@@ -62,15 +60,9 @@ X_train_valor, X_test_valor, y_train_valor, y_test_valor = train_test_split(
     X_con_valor, y_valor_con_valor, test_size=0.2, random_state=42
 )
 
-model_valor = make_pipeline(TfidfVectorizer(), RandomForestRegressor())
-model_valor.fit(X_train_valor, y_train_valor)
-
 # Evaluar los modelos
 accuracy_intencion = model_intencion.score(X_test_intencion, y_test_intencion)
 logging.info(f"Precisión del modelo de intención: {accuracy_intencion:.2f}")
-
-mse_valor = mean_squared_error(y_test_valor, model_valor.predict(X_test_valor))
-logging.info(f"MSE del modelo de valor: {mse_valor:.2f}")
 
 TOKEN = '7403419655:AAHMOvKS4I89l0Y0nwkS5MKFmFAdHj7jF6Q'  # Reemplaza con tu token real
 
@@ -121,7 +113,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     productos = callProducts()
-    logging.info(f"categorias traidas: {productos}")
+    logging.info(f"Categorías traídas: {productos}")
     
     user_id = update.effective_chat.id
     user_input = update.message.text
@@ -132,67 +124,58 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         prediccion_intencion = model_intencion.predict([user_input])
         intencion = prediccion_intencion[0]
-        logging.info(f"intencion desde handle_message: {intencion}")
-        
-        # valor = None
+        logging.info(f"Intención desde handle_message: {intencion}")
         
         numeros_str = ''
         
         if intencion in productos:
             if any(char.isdigit() for char in user_input):
                 numeros = [char for char in user_input if char.isdigit()]
-                
-                # Unir los caracteres numéricos en una cadena
                 numeros_str = ''.join(numeros)
-                print(numeros_str)
-                # prediccion_valor = model_valor.predict([user_input])
-                print(user_input)
-                # print(prediccion_valor)
-                # valor = prediccion_valor[0]  
+                logging.info(f"Números extraídos: {numeros_str}")
+
         if numeros_str: 
             logging.info(f"Intención: {intencion}, Valor: {numeros_str}")
         else:
             logging.info(f"Intención: {intencion}")
         
         if intencion == 'saludos':
-            user_responses[user_id] = 'Por favor, escribe que te gustaría buscar.'
+            user_responses[user_id] = 'Por favor, escribe qué te gustaría buscar.'
             await context.bot.send_message(chat_id=user_id, text=user_responses[user_id])
         elif intencion in productos:
             recommendedProducts = CallGetData(intencion, numeros_str)
-            
+            logging.info(f"Productos recomendados desde handle_message: {recommendedProducts}")
+
             primeraVez = True
             if recommendedProducts:
                 for product in recommendedProducts:
-                    
                     if primeraVez:
+                        primeraVez = False
                         if numeros_str:
-                            primeraVez = False
                             user_responses[user_id] = 'Claro, te recomendaré los productos disponibles que estén en ese precio.'
-                            await context.bot.send_message(chat_id=user_id, text=user_responses[user_id])
                         else:
-                            primeraVez = False
                             user_responses[user_id] = 'Te recomendaré los productos disponibles.'
-                            await context.bot.send_message(chat_id=user_id, text=user_responses[user_id])
-                    else:
-                        # Crear el botón
-                        keyboard = [
-                            [InlineKeyboardButton("Ver producto", url=f"https://tnm8rkjk-4200.use2.devtunnels.ms/product/{product['id']}")]
-                        ]
-                        reply_markup = InlineKeyboardMarkup(keyboard)
+                        await context.bot.send_message(chat_id=user_id, text=user_responses[user_id])
+                    
+                    # Crear el botón
+                    keyboard = [
+                        [InlineKeyboardButton("Ver producto", url=f"https://tnm8rkjk-4200.use2.devtunnels.ms/product/{product['id']}")]
+                    ]
+                    reply_markup = InlineKeyboardMarkup(keyboard)
 
-                        # Enviar la imagen con el nombre del producto y el botón
-                        await context.bot.send_photo(
-                            chat_id=user_id,
-                            photo=product['image'],
-                            caption=f"<b>{product['productName']}</b>\nPrecio: {product['price']}$",
-                            parse_mode='HTML',
-                            reply_markup=reply_markup
-                        )
+                    # Enviar la imagen con el nombre del producto y el botón
+                    await context.bot.send_photo(
+                        chat_id=user_id,
+                        photo=product['image'],
+                        caption=f"<b>{product['productName']}</b>\nPrecio: {product['price']}$",
+                        parse_mode='HTML',
+                        reply_markup=reply_markup
+                    )
             else: 
                 user_responses[user_id] = 'Lo siento, no hay productos disponibles.'
                 await context.bot.send_message(chat_id=user_id, text=user_responses[user_id])
         else:
-            mensaje = "Lo siento, ese producto no está disponible"
+            mensaje = "Lo siento, ese producto no está disponible."
             user_responses[user_id] = mensaje
             await context.bot.send_message(chat_id=user_id, text=user_responses[user_id])
 
