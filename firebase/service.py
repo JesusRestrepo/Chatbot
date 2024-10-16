@@ -3,19 +3,22 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 import numpy as np
 
-def get_recommendations(df, category=None, productName=None, min_price=None, max_price=None, num_recommendations=10):
-    
-  #Si tiene nombre de producto buscar por nombre de producto
-  if productName:
-    filtered_df = df[df['productName'].str.contains(productName, case=False)]
+def get_recommendations(df, category=None, valor=None, num_recommendations=10):
+  
+  if valor != '':
+    print(valor)
+    df['price'] = df['price'].str.replace('.', '', regex=False).astype(float) 
+    filtered_df = df[df['category'].str.contains(category, case=False) & (df['price'] == float(valor))]
+    if filtered_df.empty:
+        return []
   else:
-      filtered_df = df[df['category'].str.contains(category, case=False)]
+    filtered_df = df[df['category'].str.contains(category, case=False)]
+    if filtered_df.empty:
+        return []
 
-  # Filtrar por rango de precios
-  if min_price:
-    filtered_df = filtered_df[filtered_df['price'] >= min_price]
-  if max_price:
-    filtered_df = filtered_df[filtered_df['price'] <= max_price]
 
   # Seleccionar un número aleatorio de productos del filtro
-  return filtered_df.sample(n=num_recommendations)
+  if len(filtered_df) < num_recommendations:
+    return filtered_df.sample(n=len(filtered_df))
+  else:
+    return  filtered_df.sample(n=num_recommendations)

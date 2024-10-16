@@ -18,11 +18,13 @@ import numpy as np
 import requests
 import json
 from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.svm import SVC
+from sklearn.svm import SVC, SVR
 from .models import UserChat 
 from rest_framework.views import APIView
 from asgiref.sync import sync_to_async
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.metrics import mean_squared_error
 
 # Configuración del logger
 logging.basicConfig(level=logging.INFO)
@@ -33,21 +35,42 @@ with open('data.json', 'r', encoding='utf-8') as f:
     data = json.load(f)
 
 # Preparar los datos para el entrenamiento
-X = [d['mensaje'] for d in data]
-y = [d['intencion'] for d in data]
+X_con_valor = []
+y_valor_con_valor = []
 
-# Dividir los datos en conjuntos de entrenamiento y prueba
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+X_sin_valor = []
+y_intencion_sin_valor = []
 
-# Crear un pipeline para vectorización y clasificación con SVM
-model = make_pipeline(TfidfVectorizer(), SVC(kernel='linear'))
+for d in data:
+    if 'valor' in d:
+        X_con_valor.append(d['mensaje'])
+        y_valor_con_valor.append(d['valor'])
+    else:
+        X_sin_valor.append(d['mensaje'])
+        y_intencion_sin_valor.append(d['intencion'])
 
-# Entrenar el modelo
-model.fit(X_train, y_train)
+# Entrenamiento del modelo de intención
+X_train_intencion, X_test_intencion, y_train_intencion, y_test_intencion = train_test_split(
+    X_sin_valor, y_intencion_sin_valor, test_size=0.2, random_state=42
+)
 
-# Evaluar el modelo
-accuracy = model.score(X_test, y_test)
-logging.info(f"Precisión del modelo: {accuracy:.2f}")
+model_intencion = make_pipeline(TfidfVectorizer(), SVC(kernel='linear'))
+model_intencion.fit(X_train_intencion, y_train_intencion)
+
+# Entrenamiento del modelo de valor
+X_train_valor, X_test_valor, y_train_valor, y_test_valor = train_test_split(
+    X_con_valor, y_valor_con_valor, test_size=0.2, random_state=42
+)
+
+model_valor = make_pipeline(TfidfVectorizer(), RandomForestRegressor())
+model_valor.fit(X_train_valor, y_train_valor)
+
+# Evaluar los modelos
+accuracy_intencion = model_intencion.score(X_test_intencion, y_test_intencion)
+logging.info(f"Precisión del modelo de intención: {accuracy_intencion:.2f}")
+
+mse_valor = mean_squared_error(y_test_valor, model_valor.predict(X_test_valor))
+logging.info(f"MSE del modelo de valor: {mse_valor:.2f}")
 
 TOKEN = '7403419655:AAHMOvKS4I89l0Y0nwkS5MKFmFAdHj7jF6Q'  # Reemplaza con tu token real
 
@@ -78,9 +101,10 @@ def callProducts():
         logging.error(f"Error: {response.status_code}")
         return None
 
-def CallGetData(category):
-    logging.info(f"category en callgetdata: {category}")
-    url = f'http://localhost:8000/firebase/getdata/?category={category}'
+def CallGetData(category, valor):
+    logging.info(f"category en callgetdata: {category},  valor: {valor}")
+
+    url = f'http://localhost:8000/firebase/getdata/?category={category}&valor={valor}'
     response = requests.get(url)
     
     if response.status_code == 200:
@@ -106,31 +130,67 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if user_input == '/start':
         await start(update, context)
     else:
-        prediccion = model.predict([user_input])
-        intencion = prediccion[0]
+        prediccion_intencion = model_intencion.predict([user_input])
+        intencion = prediccion_intencion[0]
         logging.info(f"intencion desde handle_message: {intencion}")
+        
+        # valor = None
+        
+        numeros_str = ''
+        
+        if intencion in productos:
+            if any(char.isdigit() for char in user_input):
+                numeros = [char for char in user_input if char.isdigit()]
+                
+                # Unir los caracteres numéricos en una cadena
+                numeros_str = ''.join(numeros)
+                print(numeros_str)
+                # prediccion_valor = model_valor.predict([user_input])
+                print(user_input)
+                # print(prediccion_valor)
+                # valor = prediccion_valor[0]  
+        if numeros_str: 
+            logging.info(f"Intención: {intencion}, Valor: {numeros_str}")
+        else:
+            logging.info(f"Intención: {intencion}")
         
         if intencion == 'saludos':
             user_responses[user_id] = 'Por favor, escribe que te gustaría buscar.'
             await context.bot.send_message(chat_id=user_id, text=user_responses[user_id])
         elif intencion in productos:
-            recommendedProducts = CallGetData(intencion)
+            recommendedProducts = CallGetData(intencion, numeros_str)
             
-            for product in recommendedProducts:
-                # Crear el botón
-                keyboard = [
-                    [InlineKeyboardButton("Ver producto", url=f"https://tnm8rkjk-4200.use2.devtunnels.ms/product/{product['id']}")]
-                ]
-                reply_markup = InlineKeyboardMarkup(keyboard)
+            primeraVez = True
+            if recommendedProducts:
+                for product in recommendedProducts:
+                    
+                    if primeraVez:
+                        if numeros_str:
+                            primeraVez = False
+                            user_responses[user_id] = 'Claro, te recomendaré los productos disponibles que estén en ese precio.'
+                            await context.bot.send_message(chat_id=user_id, text=user_responses[user_id])
+                        else:
+                            primeraVez = False
+                            user_responses[user_id] = 'Te recomendaré los productos disponibles.'
+                            await context.bot.send_message(chat_id=user_id, text=user_responses[user_id])
+                    else:
+                        # Crear el botón
+                        keyboard = [
+                            [InlineKeyboardButton("Ver producto", url=f"https://tnm8rkjk-4200.use2.devtunnels.ms/product/{product['id']}")]
+                        ]
+                        reply_markup = InlineKeyboardMarkup(keyboard)
 
-                # Enviar la imagen con el nombre del producto y el botón
-                await context.bot.send_photo(
-                    chat_id=user_id,
-                    photo=product['image'],  # URL de la imagen
-                    caption=f"<b>{product['productName']}</b>",  # Nombre en negrita
-                    parse_mode='HTML',
-                    reply_markup=reply_markup  # Agregar el botón
-                )
+                        # Enviar la imagen con el nombre del producto y el botón
+                        await context.bot.send_photo(
+                            chat_id=user_id,
+                            photo=product['image'],
+                            caption=f"<b>{product['productName']}</b>\nPrecio: {product['price']}$",
+                            parse_mode='HTML',
+                            reply_markup=reply_markup
+                        )
+            else: 
+                user_responses[user_id] = 'Lo siento, no hay productos disponibles.'
+                await context.bot.send_message(chat_id=user_id, text=user_responses[user_id])
         else:
             mensaje = "Lo siento, ese producto no está disponible"
             user_responses[user_id] = mensaje
