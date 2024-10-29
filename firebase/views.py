@@ -37,8 +37,12 @@ def GetData(request):
     print(f"category en GetData: {category}, valor : {valor}")
 
     dfProducts = GetProducts()
-    if category:
+    if category and  valor:
         recommendedProducts = get_recommendations(dfProducts, category=category, valor=valor, num_recommendations=6)
+        return Response(recommendedProducts.to_dict('records'), status=status.HTTP_200_OK)
+    elif category:
+        recommendedProducts = get_recommendations(dfProducts, category=category, num_recommendations=6)
+        print(f'desde getdata la respuesta: {recommendedProducts}')
         return Response(recommendedProducts.to_dict('records'), status=status.HTTP_200_OK)
     else:
         unique_categories = dfProducts['category'].str.lower().unique().tolist()
